@@ -393,6 +393,22 @@ CrossPad includes the MIT-licensed [WinUHid project](https://github.com/cgutman/
 The Windows backend needs both the runtime DLLs and the UMDF2 driver installed
 on the machine.
 
+Use `isDriverInstalled()` to update application menus or setup screens:
+
+```js
+const { isDriverInstalled } = require('crosspad');
+
+if (isDriverInstalled()) {
+  showUninstallDriverButton();
+} else {
+  showInstallDriverButton();
+}
+```
+
+It returns `true` only when the packaged driver version matches the installed
+driver and the `\\.\WinUHid` device interface is available. It returns `false`
+on unsupported platforms or when the driver is not ready.
+
 For local debugging, you can also override the bundled WinUHid libraries:
 
 ```powershell

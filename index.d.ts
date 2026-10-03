@@ -53,5 +53,6 @@ export class X360Controller {
 
 export function createX360Controller(): X360Controller;
 export function createXboxOneController(): X360Controller;
+export function isDriverInstalled(): boolean;
 export function installDriver(): void;
 export function uninstallDriver(): void;

@@ -85,54 +85,61 @@ class X360Controller {
 }
 
 function installDriver() {
-  if (process.platform !== 'win32') {
-    throw new Error('The WinUHid driver can only be installed on Windows.');
-  }
-  if (process.arch !== 'x64') {
-    throw new Error(`The WinUHid driver installer supports Windows x64, not ${process.arch}.`);
+  assertWindowsDriverPlatform('install');
+
+  const installer = getDriverInstallerPath();
+  if (isDriverInstalled()) {
+    return;
   }
 
+  if (typeof native.installDriver !== 'function') {
+    throw new Error(
+      'The native addon does not include UAC driver installation support. Rebuild the addon with the current package.'
+    );
+  }
+
+  const status = native.installDriver(process.execPath, installer, '--elevated');
+  if (status !== 0) {
+    throw new Error(`WinUHid driver installation failed with exit code ${status}.`);
+  }
+}
+
+function assertWindowsDriverPlatform(operation) {
+  if (process.platform !== 'win32') {
+    throw new Error(`The WinUHid driver can only be ${operation}ed on Windows.`);
+  }
+  if (process.arch !== 'x64') {
+    throw new Error(`The WinUHid driver ${operation}er supports Windows x64, not ${process.arch}.`);
+  }
+}
+
+function getDriverInstallerPath() {
   const installer = path.join(__dirname, 'scripts', 'install-driver.js');
   if (!fs.existsSync(installer)) {
     throw new Error(`The packaged WinUHid driver installer was not found: ${installer}`);
   }
+  return installer;
+}
 
-  if (process.platform === 'win32') {
-    const check = spawnSync(process.execPath, [installer, '--check'], {
-      stdio: 'inherit'
-    });
-    if (check.error) {
-      throw check.error;
-    }
-    if (check.status === 0) {
-      return;
-    }
-    if (check.status !== 1) {
-      throw new Error(`WinUHid driver check failed with exit code ${check.status}.`);
-    }
-
-    if (typeof native.installDriver !== 'function') {
-      throw new Error(
-        'The native addon does not include UAC driver installation support. Rebuild the addon with the current package.'
-      );
-    }
-    const result = {
-      status: native.installDriver(process.execPath, installer, '--elevated')
-    };
-    if (result.status !== 0) {
-      throw new Error(`WinUHid driver installation failed with exit code ${result.status}.`);
-    }
-    return;
+function isDriverInstalled() {
+  if (process.platform !== 'win32' || process.arch !== 'x64') {
+    return false;
   }
 
-  const result = spawnSync(process.execPath, [installer], { stdio: 'inherit' });
-
-  if (result.error) {
-    throw result.error;
+  const installer = getDriverInstallerPath();
+  const check = spawnSync(process.execPath, [installer, '--check'], {
+    stdio: 'ignore'
+  });
+  if (check.error) {
+    throw check.error;
   }
-  if (result.status !== 0) {
-    throw new Error(`WinUHid driver installation failed with exit code ${result.status}.`);
+  if (check.status === 0) {
+    return true;
   }
+  if (check.status === 1) {
+    return false;
+  }
+  throw new Error(`WinUHid driver check failed with exit code ${check.status}.`);
 }
 
 function uninstallDriver() {
@@ -167,6 +174,7 @@ module.exports = {
   X360Controller,
   createX360Controller: () => new X360Controller('generic'),
   createXboxOneController: () => new X360Controller('xbox-one'),
+  isDriverInstalled,
   installDriver,
   uninstallDriver
 };
