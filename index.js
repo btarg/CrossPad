@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const bundledWinUhid = path.join(__dirname, 'vendor', 'WinUHid', 'bin', 'win32-x64', 'WinUHid.dll');
 const bundledWinUhidDevs = path.join(__dirname, 'vendor', 'WinUHid', 'bin', 'win32-x64', 'WinUHidDevs.dll');
@@ -83,8 +84,32 @@ class X360Controller {
   }
 }
 
+function installDriver() {
+  if (process.platform !== 'win32') {
+    throw new Error('The WinUHid driver can only be installed on Windows.');
+  }
+  if (process.arch !== 'x64') {
+    throw new Error(`The WinUHid driver installer supports Windows x64, not ${process.arch}.`);
+  }
+
+  const installer = path.join(__dirname, 'scripts', 'install-driver.js');
+  if (!fs.existsSync(installer)) {
+    throw new Error(`The packaged WinUHid driver installer was not found: ${installer}`);
+  }
+
+  const result = spawnSync(process.execPath, [installer], { stdio: 'inherit' });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`WinUHid driver installation failed with exit code ${result.status}.`);
+  }
+}
+
 module.exports = {
   X360Controller,
   createX360Controller: () => new X360Controller('generic'),
-  createXboxOneController: () => new X360Controller('xbox-one')
+  createXboxOneController: () => new X360Controller('xbox-one'),
+  installDriver
 };

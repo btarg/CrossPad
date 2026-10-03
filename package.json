@@ -1,8 +1,9 @@
 {
-  "name": "native-x360-pad",
+  "name": "crosspad",
   "version": "0.1.0",
   "description": "Native virtual Xbox 360-style controller bindings without ViGEm",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "install": "node scripts/install-native.js",
     "build": "node-gyp rebuild",
@@ -17,9 +18,11 @@
     "prebuilds",
     "binding.gyp",
     "scripts/install-native.js",
+    "scripts/install-driver.js",
     "src",
     "examples",
     "index.js",
+    "index.d.ts",
     "vendor/WinUHid/bin",
     "vendor/WinUHid/package/WinUHidDriver.dll",
     "vendor/WinUHid/package/WinUHidDriver.inf",

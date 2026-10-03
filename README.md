@@ -7,6 +7,9 @@ Xbox One-style controller profile available on both platforms.
 CrossPad does not use ViGEm. The JavaScript API is intentionally small and
 works with the same button and axis state on each supported platform.
 
+The package includes first-party TypeScript declarations for the public API,
+so no separate `@types` package is required.
+
 ## Requirements
 
 ### All platforms
@@ -33,13 +36,14 @@ x64, plus the Windows WinUHid user libraries. A consumer does not need a
 compiler for those platforms:
 
 ```sh
-npm install native-x360-pad
+npm install crosspad
 ```
 
 The package selects the native addon for the current `process.platform` and
 `process.arch`. The Windows UMDF2 driver still must be installed separately
 with the signed driver package and administrator privileges; shipping a DLL
-alone cannot install a Windows device driver.
+alone cannot install a Windows device driver. The package exposes an explicit
+`installDriver()` helper for this setup step.
 
 The repository's [GitHub Actions workflow](.github/workflows/package.yml)
 rebuilds both platform addons, builds the WinUHid user libraries on Windows,
@@ -60,8 +64,8 @@ a separate temporary project using Node.js 18 or newer:
 mkdir /tmp/crosspad-package-test
 cd /tmp/crosspad-package-test
 npm init -y
-npm install /absolute/path/to/native-x360-pad-0.1.0.tgz
-node -e "const p=require('native-x360-pad'); console.log(Object.keys(p))"
+npm install /absolute/path/to/crosspad-0.1.0.tgz
+node -e "const p=require('crosspad'); console.log(Object.keys(p))"
 ```
 
 The install should use the prebuilt addon without compiling. The package
@@ -96,7 +100,7 @@ verifies the final npm tarball. A tag build publishes the same package when
 Use the explicit Xbox One factory:
 
 ```js
-const { createXboxOneController } = require('native-x360-pad');
+const { createXboxOneController } = require('crosspad');
 
 const pad = createXboxOneController();
 pad.updateMode = 'manual';
@@ -111,12 +115,78 @@ pad.button.A.setValue(false);
 pad.disconnect();
 ```
 
+The same API is available from TypeScript:
+
+```ts
+import {
+  createXboxOneController,
+  type X360Controller
+} from 'crosspad';
+
+const pad: X360Controller = createXboxOneController();
+pad.button.A.setValue(true);
+pad.axis.leftX.setValue(-1);
+pad.update();
+```
+
 The included [hello-world example](examples/hello-world.js) creates this
 profile, rotates both analog sticks, moves the D-pad, and cycles A/B/X/Y:
 
 ```sh
 npm start
 ```
+
+### Installing the Windows driver from Node.js
+
+On Windows x64, install the packaged WinUHid driver before connecting the
+first controller:
+
+```js
+const { installDriver } = require('crosspad');
+
+installDriver(); // Requires an already elevated process.
+```
+
+`installDriver()` is intentionally explicit and only works on Windows x64.
+It runs a Node.js installer that invokes Windows' built-in `pnputil.exe`, creates
+the root-enumerated `Root\WinUHid` device, installs the packaged INF, and
+verifies the `\\.\WinUHid` device interface. The calling process must already
+be running as administrator; Node.js cannot bypass Windows UAC by itself.
+Before installing, it compares the packaged INF `DriverVer` value with the
+installed `Root\WinUHid` driver version and skips the installation when they
+match. If Windows does not expose a readable version, it safely proceeds with
+the installation.
+The call throws if the process is not elevated, the package is missing driver
+files, Windows rejects the driver signature, or installation cannot be
+completed.
+
+For example, start an elevated terminal with **Run as administrator** and run
+the application from that terminal. This avoids PowerShell and does not use
+`ExecutionPolicy Bypass`:
+
+```powershell
+node app.js
+```
+
+Applications should normally run this once during their own setup flow and
+then call `createXboxOneController()`:
+
+```js
+const {
+  installDriver,
+  createXboxOneController
+} = require('crosspad');
+
+installDriver();
+
+const pad = createXboxOneController();
+pad.connect();
+```
+
+The package must contain a production-trusted WinUHid driver package for
+end-user installation. The development certificate produced by the local WDK
+build is only for development and must not be silently trusted or distributed
+as a production driver.
 
 `createXboxOneController()` uses the MIT-licensed upstream WinUHidDevs Xbox
 One preset on Windows. On Linux it creates an evdev/uinput device named
@@ -125,7 +195,7 @@ One preset on Windows. On Linux it creates an evdev/uinput device named
 The default factory remains available:
 
 ```js
-const { createX360Controller } = require('native-x360-pad');
+const { createX360Controller } = require('crosspad');
 const pad = createX360Controller();
 ```
 
@@ -140,7 +210,7 @@ preset.
 const {
   createX360Controller,
   createXboxOneController
-} = require('native-x360-pad');
+} = require('crosspad');
 ```
 
 Both factories return a controller with:
@@ -279,7 +349,7 @@ vendor/WinUHid/package/WinUHidDriver.inf
 vendor/WinUHid/package/winuhiddriver.cat
 ```
 
-The setup script may request administrator elevation because it creates the
+The Node.js installer requires administrator privileges because it creates the
 root-enumerated WinUHid device. It also verifies the `\\.\WinUHid` interface.
 The development build uses a WDK test certificate and is intended only for
 local development. Production distribution requires a production-trusted
@@ -309,10 +379,7 @@ The Windows generic backend deliberately uses a neutral identity and a
 minimal joystick descriptor. This avoids pretending that a generic HID report
 is an authentic Microsoft XUSB device.
 
-Do not test experimental descriptors with Chromium-based applications open.
-HID enumeration bugs in an application or Windows Gaming Input can affect
-processes that enumerate the device. Disconnect the controller and remove the
-WinUHid device with the driver tooling if enumeration causes instability.
+It has been tested and verified to work with SDL3 applications and the browser Gamepad API (e.g. Hardware Tester).
 
 ## WinUHid attribution and license
 
@@ -323,4 +390,6 @@ The original license and copyright notice are preserved in
 [vendor/WinUHid/LICENSE](vendor/WinUHid/LICENSE).
 
 The WinUHid source and preset are used directly from the upstream MIT-licensed
+repository.
+
 CrossPad itself is distributed under the MIT License.
