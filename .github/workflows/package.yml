@@ -40,15 +40,55 @@ jobs:
       - name: Build WinUHid user libraries
         shell: pwsh
         run: |
-          $msbuild = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
-          & $msbuild 'vendor\WinUHid\WinUHid\WinUHid.vcxproj' /p:Configuration=Release /p:Platform=x64 /m
-          if ($LASTEXITCODE -ne 0) { throw 'WinUHid build failed.' }
-          & $msbuild 'vendor\WinUHid\WinUHidDevs\WinUHidDevs.vcxproj' /p:Configuration=Release /p:Platform=x64 /m
-          if ($LASTEXITCODE -ne 0) { throw 'WinUHidDevs build failed.' }
+          $ErrorActionPreference = 'Stop'
+
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere)) {
+            throw "vswhere.exe was not found at $vswhere"
+          }
+
+          $installPath = (& $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath).Trim()
+          if (-not $installPath) {
+            throw 'A Visual Studio installation with MSBuild was not found.'
+          }
+
+          $msbuild = Join-Path $installPath 'MSBuild\Current\Bin\MSBuild.exe'
+          if (-not (Test-Path -LiteralPath $msbuild)) {
+            throw "MSBuild was not found at $msbuild"
+          }
+
+          $projects = @(
+            @{
+              Name = 'WinUHid'
+              Path = 'vendor\WinUHid\WinUHid\WinUHid.vcxproj'
+              Output = 'vendor\WinUHid\WinUHid\build\Release\x64\WinUHid.dll'
+            },
+            @{
+              Name = 'WinUHidDevs'
+              Path = 'vendor\WinUHid\WinUHidDevs\WinUHidDevs.vcxproj'
+              Output = 'vendor\WinUHid\WinUHidDevs\build\Release\x64\WinUHidDevs.dll'
+            }
+          )
+
+          foreach ($project in $projects) {
+            if (-not (Test-Path -LiteralPath $project.Path)) {
+              throw "$($project.Name) project was not found at $($project.Path)"
+            }
+
+            & $msbuild $project.Path /p:Configuration=Release /p:Platform=x64 /m
+            if ($LASTEXITCODE -ne 0) {
+              throw "$($project.Name) build failed."
+            }
+
+            if (-not (Test-Path -LiteralPath $project.Output)) {
+              throw "$($project.Name) build did not produce $($project.Output)"
+            }
+          }
+
           New-Item -ItemType Directory -Force -Path 'prebuilds\win32-x64', 'vendor\WinUHid\bin\win32-x64' | Out-Null
-          Copy-Item 'build\Release\virtual_x360.node' 'prebuilds\win32-x64\'
-          Copy-Item 'vendor\WinUHid\WinUHid\build\Release\x64\WinUHid.dll' 'vendor\WinUHid\bin\win32-x64\'
-          Copy-Item 'vendor\WinUHid\WinUHidDevs\build\Release\x64\WinUHidDevs.dll' 'vendor\WinUHid\bin\win32-x64\'
+          Copy-Item -LiteralPath 'build\Release\virtual_x360.node' -Destination 'prebuilds\win32-x64\' -Force
+          Copy-Item -LiteralPath $projects[0].Output -Destination 'vendor\WinUHid\bin\win32-x64\WinUHid.dll' -Force
+          Copy-Item -LiteralPath $projects[1].Output -Destination 'vendor\WinUHid\bin\win32-x64\WinUHidDevs.dll' -Force
       - uses: actions/upload-artifact@v4
         with:
           name: windows-package-files
