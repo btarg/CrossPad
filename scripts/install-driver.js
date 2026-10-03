@@ -16,6 +16,22 @@ const inf = path.join(driverPackage, 'WinUHidDriver.inf');
 const catalog = path.join(driverPackage, 'winuhiddriver.cat');
 const driver = path.join(driverPackage, 'WinUHidDriver.dll');
 const elevated = process.argv.includes('--elevated');
+const uninstallRequested = process.argv.includes('--uninstall');
+
+if (elevated) {
+  process.title = uninstallRequested
+    ? 'CrossPad driver uninstaller'
+    : 'CrossPad driver installer';
+  const operation = uninstallRequested ? 'UNINSTALLING' : 'INSTALLING';
+  console.log('');
+  console.log('============================================================');
+  console.log(`                 CROSSPAD DRIVER ${operation}`);
+  console.log('============================================================');
+  console.log('This elevated window is modifying the WinUHid device driver.');
+  console.log('Do not close this window until the operation has completed.');
+  console.log('============================================================');
+  console.log('');
+}
 
 for (const file of [inf, catalog, driver]) {
   if (!fs.existsSync(file)) {
@@ -259,7 +275,7 @@ function queryWinUhidPackages() {
   return packages;
 }
 
-if (process.argv.includes('--uninstall')) {
+if (uninstallRequested) {
   if (!elevated) {
     elevate('--uninstall');
     process.exit(0);

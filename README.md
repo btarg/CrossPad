@@ -145,6 +145,10 @@ On Windows, the example calls `installDriver()` before connecting. Run it from
 an elevated terminal so it can verify the packaged driver version and install
 or update the driver only when necessary.
 
+The example wraps driver setup in `try/catch`, prints the error, and stops
+before creating the controller if installation or verification fails. This
+demonstrates the error-handling pattern applications should use.
+
 ### Installing the Windows driver from Node.js
 
 On Windows x64, install the packaged WinUHid driver before connecting the
@@ -231,10 +235,58 @@ node scripts\install-driver.js
 node scripts\install-driver.js --uninstall
 ```
 
+Windows derives the UAC consent dialog application name from the executable
+being elevated, so the standard dialog may identify the process as `Node.js`.
+The elevated console changes its title to `CrossPad driver installer` or
+`CrossPad driver uninstaller` and prints a prominent operation banner before
+making any changes.
+
 The package must contain a production-trusted WinUHid driver package for
 end-user installation. The development certificate produced by the local WDK
 build is only for development and must not be silently trusted or distributed
 as a production driver.
+
+Both driver helpers are synchronous. They return normally when the requested
+operation succeeds, including when `installDriver()` finds that the correct
+driver is already installed. They throw an `Error` when setup fails, the user
+cancels UAC, `devcon.exe` is unavailable, the driver package is missing, or
+Windows cannot verify the device:
+
+```js
+const {
+  installDriver,
+  uninstallDriver
+} = require('crosspad');
+
+try {
+  installDriver();
+  console.log('WinUHid driver is ready.');
+} catch (error) {
+  console.error('WinUHid installation failed:', error.message);
+}
+
+try {
+  uninstallDriver();
+  console.log('WinUHid driver was removed.');
+} catch (error) {
+  console.error('WinUHid uninstallation failed:', error.message);
+}
+```
+
+Applications can use the thrown error to disable controller functionality,
+display setup instructions, or distinguish a cancelled UAC prompt:
+
+```js
+try {
+  installDriver();
+} catch (error) {
+  if (error.message.includes('cancelled')) {
+    console.log('Driver installation was cancelled.');
+  } else {
+    console.error(error.message);
+  }
+}
+```
 
 `createXboxOneController()` uses the MIT-licensed upstream WinUHidDevs Xbox
 One preset on Windows. On Linux it creates an evdev/uinput device named

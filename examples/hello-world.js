@@ -4,7 +4,13 @@ const { createXboxOneController, installDriver } = require('..');
 
 if (process.platform === 'win32') {
   console.log('Checking the installed WinUHid driver...');
-  installDriver();
+  try {
+    installDriver();
+    console.log('WinUHid driver is ready.');
+  } catch (error) {
+    console.error('WinUHid driver setup failed:', error.message);
+    process.exit(1);
+  }
 }
 
 const controller = createXboxOneController();
