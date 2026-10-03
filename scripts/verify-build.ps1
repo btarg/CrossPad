@@ -81,10 +81,16 @@ if (-not $SkipImportTest) {
 
 if (-not $SkipPackageTest) {
   Push-Location $rootPath
+  $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) "crosspad-npm-pack-$([System.Guid]::NewGuid()).log"
   try {
-    $packOutput = & npm pack --dry-run --json 2>&1
+    $packOutput = & npm pack --dry-run --json 2> $stderrPath
     if ($LASTEXITCODE -ne 0) {
-      throw "npm pack --dry-run failed with exit code $LASTEXITCODE."
+      $details = if (Test-Path -LiteralPath $stderrPath) {
+        Get-Content -LiteralPath $stderrPath -Raw
+      } else {
+        ''
+      }
+      throw "npm pack --dry-run failed with exit code $LASTEXITCODE. $details"
     }
 
     $packJson = ($packOutput -join "`n") | ConvertFrom-Json
@@ -98,6 +104,9 @@ if (-not $SkipPackageTest) {
     Write-Host 'Verified required artifacts are included in npm pack output.'
   } finally {
     Pop-Location
+    if (Test-Path -LiteralPath $stderrPath) {
+      Remove-Item -LiteralPath $stderrPath -Force
+    }
   }
 }
 
