@@ -1,11 +1,12 @@
 param(
-  [switch]$InstallDriver = $true,
+  [string]$InstallDriver = 'true',
   [switch]$InstallOnly,
   [switch]$SkipDeviceVerification,
   [string]$InstallLogPath
 )
 
 $ErrorActionPreference = 'Stop'
+$installDriverEnabled = $InstallDriver -notin @('false', 'False', '0')
 $root = Split-Path -Parent $PSScriptRoot
 $userProject = Join-Path $root 'vendor\WinUHid\WinUHid\WinUHid.vcxproj'
 $devicesProject = Join-Path $root 'vendor\WinUHid\WinUHidDevs\WinUHidDevs.vcxproj'
@@ -121,7 +122,7 @@ Copy-Item -LiteralPath $driverInf -Destination $package -Force
 Copy-Item -LiteralPath $driverCat -Destination $package -Force
 Copy-Item -LiteralPath $driverCertificate -Destination (Join-Path $package 'WinUHidDriver.cer') -Force
 
-if ($InstallDriver) {
+if ($installDriverEnabled) {
   $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
   if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $installLog = Join-Path $env:TEMP 'native-x360-pad-winuhid-install.log'

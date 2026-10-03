@@ -47,6 +47,10 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path 'prebuilds\win32-x64' | Out-Null
           Copy-Item -LiteralPath 'build\Release\virtual_x360.node' -Destination 'prebuilds\win32-x64\' -Force
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\verify-build.ps1
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Build verification failed.'
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-package-files

@@ -1,0 +1,104 @@
+param(
+  [string]$Root = (Split-Path -Parent $PSScriptRoot),
+  [ValidateSet('win32-x64', 'linux-x64')]
+  [string]$Target = 'win32-x64',
+  [switch]$SkipImportTest,
+  [switch]$SkipPackageTest
+)
+
+$ErrorActionPreference = 'Stop'
+$rootPath = (Resolve-Path -LiteralPath $Root).Path
+
+function Assert-File {
+  param([string]$RelativePath)
+
+  $path = Join-Path $rootPath $RelativePath
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    throw "Required build artifact is missing: $RelativePath"
+  }
+
+  $file = Get-Item -LiteralPath $path
+  if ($file.Length -le 0) {
+    throw "Build artifact is empty: $RelativePath"
+  }
+
+  Write-Host ("Verified {0} ({1:N0} bytes)" -f $RelativePath, $file.Length)
+}
+
+function Assert-CommandSucceeded {
+  param(
+    [string]$Command,
+    [string[]]$Arguments
+  )
+
+  & $Command @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "Command failed with exit code $LASTEXITCODE`: $Command $($Arguments -join ' ')"
+  }
+}
+
+$requiredFiles = @(
+  "prebuilds\$Target\virtual_x360.node"
+)
+
+if ($Target -eq 'win32-x64') {
+  $requiredFiles += @(
+    'vendor\WinUHid\bin\win32-x64\WinUHid.dll',
+    'vendor\WinUHid\bin\win32-x64\WinUHidDevs.dll',
+    'vendor\WinUHid\package\WinUHidDriver.dll',
+    'vendor\WinUHid\package\WinUHidDriver.inf',
+    'vendor\WinUHid\package\winuhiddriver.cat'
+  )
+}
+
+foreach ($relativePath in $requiredFiles) {
+  Assert-File $relativePath
+}
+
+$infPath = Join-Path $rootPath 'vendor\WinUHid\package\WinUHidDriver.inf'
+if ($Target -eq 'win32-x64') {
+  $infText = Get-Content -LiteralPath $infPath -Raw
+  if ($infText -notmatch '(?im)^\s*\[Version\]\s*$') {
+    throw 'WinUHidDriver.inf is missing its [Version] section.'
+  }
+  if ($infText -notmatch '(?im)^\s*CatalogFile\s*=\s*winuhiddriver\.cat\s*$') {
+    throw 'WinUHidDriver.inf does not reference winuhiddriver.cat.'
+  }
+  Write-Host 'Verified WinUHidDriver.inf structure.'
+}
+
+if (-not $SkipImportTest) {
+  Push-Location $rootPath
+  try {
+    Assert-CommandSucceeded 'node' @(
+      '-e',
+      "const crosspad = require('./'); if (!crosspad || typeof crosspad.createXboxOneController !== 'function') { throw new Error('CrossPad API is incomplete.'); } console.log('CrossPad package import succeeded.');"
+    )
+  } finally {
+    Pop-Location
+  }
+}
+
+if (-not $SkipPackageTest) {
+  Push-Location $rootPath
+  try {
+    $packOutput = & npm pack --dry-run --json 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      throw "npm pack --dry-run failed with exit code $LASTEXITCODE."
+    }
+
+    $packJson = ($packOutput -join "`n") | ConvertFrom-Json
+    $packNames = @($packJson.files | ForEach-Object { $_.path })
+    foreach ($relativePath in $requiredFiles) {
+      $packagePath = $relativePath -replace '\\', '/'
+      if ($packNames -notcontains $packagePath) {
+        throw "Required artifact is not included in the npm package: $packagePath"
+      }
+    }
+    Write-Host 'Verified required artifacts are included in npm pack output.'
+  } finally {
+    Pop-Location
+  }
+}
+
+Write-Host "Build verification succeeded for $Target."

@@ -464,6 +464,20 @@ $env:WINUHID_DEVS_DLL = 'C:\path\to\WinUHidDevs.dll'
 pnpm start
 ```
 
+To verify a Windows build before importing it from another project, run:
+
+```powershell
+pnpm run verify:build
+```
+
+The verification script checks that the native addon, WinUHid runtime DLLs,
+UMDF driver DLL, INF, and catalog exist in their package locations, validates
+the driver INF references its catalog, imports the package through
+`require('./')`, and confirms all required files are included by `npm pack`.
+It exits with a non-zero status when any check fails, so it can also be used
+as a CI step. The Windows CI build runs this verification before uploading
+its artifacts.
+
 If `connect()` reports Windows error 2, the driver package is not installed,
 the device interface is unavailable, or Windows rejected the driver
 signature. Check Device Manager and the setup output.
