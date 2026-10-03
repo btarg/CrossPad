@@ -1,74 +1,118 @@
 # CrossPad
 
-Cross-platform Node.js bindings for creating virtual gamepads. CrossPad
-provides a Linux `uinput` backend and a Windows WinUHid backend, with an
+Cross-platform Node.js bindings for creating virtual gamepads without ViGEm.
+
+CrossPad uses a Linux `uinput` backend and a Windows `WinUHid` backend, with an
 Xbox One-style controller profile available on both platforms.
 
-CrossPad does not use ViGEm. The JavaScript API is intentionally small and
-works with the same button and axis state on each supported platform.
+## Build from source
 
-The package includes first-party TypeScript declarations for the public API,
-so no separate `@types` package is required.
-
-## Requirements
+Run these commands from the repository root.
 
 ### All platforms
 
+Install:
+
+```powershell
+npm install
+```
+
+Build the native Node.js addon:
+
+```powershell
+npm run build
+```
+
+`npm install` builds the addon automatically when no matching prebuilt addon is
+present. Run `npm run build` again after changing native source files.
+
+### Windows
+
+The Windows build also builds the WinUHid runtime libraries and UMDF2 driver.
+Install these prerequisites first:
+
 - Node.js 18 or newer
-- A C++17 compiler supported by `node-gyp`
+- Visual Studio 2022 Build Tools with Desktop C++ and MSBuild, or a compatible
+  VS2026 Build Tools installation
+- Windows SDK
+- Windows Driver Kit (WDK) and UMDF tools
 - Python 3
+- x64 Spectre-mitigated libraries if MSBuild reports `MSB8040`
 
-Install dependencies and build the native addon:
+The local install step also needs `devcon.exe` from the WDK in one of the
+standard Windows Driver Kit tool directories. If `devcon.exe` is unavailable,
+use the CI-safe workflow below and install the packaged driver separately.
 
-```powershell
-pnpm install
-pnpm run build
-```
-
-`pnpm install` runs the native build through the package's install script.
-Run `pnpm run build` after changing native source files.
-
-## Installing from npm
-
-Published releases include prebuilt native addons for Linux x64 and Windows
-x64, plus the Windows WinUHid user libraries. A consumer does not need a
-compiler for those platforms:
-
-```sh
-pnpm add crosspad
-```
-
-The package selects the native addon for the current `process.platform` and
-`process.arch`. The Windows UMDF2 driver still must be installed separately
-with the signed driver package and administrator privileges; shipping a DLL
-alone cannot install a Windows device driver. The package exposes an explicit
-`installDriver()` helper for this setup step.
-
-The [GitHub Actions workflow](.github/workflows/package.yml) builds both
-platforms, generates the Windows driver artifacts, verifies the package, and
-publishes version tags when `NPM_TOKEN` is configured. Generated artifacts are
-not committed to Git.
-
-To test the exact package locally, create a tarball and install it in a
-separate Node.js 18+ project:
-
-```sh
-mkdir /tmp/crosspad-package-test
-cd /tmp/crosspad-package-test
-pnpm init
-pnpm install /absolute/path/to/crosspad-0.1.0.tgz
-node -e "const p=require('crosspad'); console.log(Object.keys(p))"
-```
-
-Create the tarball with `pnpm pack`. Inspect its contents without creating a
-tarball with:
+Build the native addon, WinUHid libraries, and driver, then install the
+development driver and verify the device:
 
 ```powershell
-pnpm pack --dry-run
+npm run build:windows
 ```
 
-The package contains a platform-specific addon under `prebuilds/` and, on
-Windows, the WinUHid runtime DLLs and driver package.
+This command may request administrator approval. The local WDK test
+certificate and driver are for development only.
+
+To build and package the Windows artifacts without installing the device
+(the CI-safe workflow), run:
+
+```powershell
+npm run build
+npm run build:winuhid -- -InstallDriver:$false -SkipDeviceVerification
+npm run stage:windows
+npm run verify:build
+```
+
+`stage:windows` copies the native addon into `prebuilds\win32-x64`.
+`verify:build` checks the addon, WinUHid files, driver package, INF structure,
+package import, and npm package contents.
+
+### Linux
+
+On Debian or Ubuntu, install the native build prerequisites:
+
+```sh
+sudo apt update
+sudo apt install build-essential python3
+```
+
+Load `uinput` and grant the current user access:
+
+```sh
+sudo modprobe uinput
+sudo usermod -aG input "$USER"
+```
+
+Log out and back in after changing group membership, then build:
+
+```sh
+npm install
+npm run build
+```
+
+If `/dev/uinput` is unavailable, check that the module is loaded and that the
+process has read/write access.
+
+### Run the example
+
+```powershell
+npm start
+```
+
+On Windows, `npm run build:windows` installs the development driver before
+starting the example. For a packaged install, use the `installDriver()` helper
+described in [Windows driver setup](#windows-driver-setup).
+
+## Install from npm
+
+```powershell
+npm install crosspad
+```
+
+Published packages include prebuilt native addons and the Windows WinUHid
+runtime files. Windows still requires the WinUHid driver to be installed once.
+This library includes TypeScript declarations, so no separate `@types` package
+is required.
 
 ## Xbox One-style controller
 
@@ -111,39 +155,25 @@ profile, rotates both analog sticks, moves the D-pad, and cycles A/B/X/Y:
 npm start
 ```
 
-On Windows, the example calls `installDriver()` before connecting. Run it from
-an elevated terminal so it can verify the packaged driver version and install
-or update the driver only when necessary.
-
-The example wraps driver setup in `try/catch`, prints the error, and stops
-before creating the controller if installation or verification fails. This
-demonstrates the error-handling pattern applications should use.
+On Windows, the example calls `installDriver()` before connecting.
+This will start the UAC prompt for administrator approval if the driver is not already installed.
+It will throw an error if the process is not elevated or the driver cannot be installed.
 
 ### Installing the Windows driver from Node.js
-
-On Windows x64, install the packaged WinUHid driver before connecting the
-first controller:
 
 ```js
 const { installDriver } = require('crosspad');
 
-installDriver(); // Requires an already elevated process.
+try {
+  installDriver();
+} catch (error) {
+  console.error(error.message);
+}
 ```
 
-`installDriver()` is intentionally explicit and only works on Windows x64.
-It runs a Node.js installer that queries Windows with `pnputil.exe`, then
-creates and installs the packaged INF for the root-enumerated
-`Root\WinUHid` device with `devcon.exe`, and
-verifies the `\\.\WinUHid` device interface. The calling process must already
-be running on Windows with a user account allowed to approve UAC. The native
-Windows launcher starts the installer with the standard UAC `runas` verb, so
-the main Node.js process does not need to be elevated beforehand.
-Before installing, it compares the packaged INF `DriverVer` value with the
-installed driver matched by the `Root\WinUHid` hardware ID and skips the
-installation when they match. The device's instance ID may be something like
-`ROOT\SYSTEM\0007`, so the installer does not assume that it is
-`ROOT\WinUHid`. If Windows does not expose a readable version, it safely
-proceeds with the installation.
+This is the one-time Windows setup step. It uses UAC for the driver install,
+so the user will be asked for admin approval if the driver is not already
+installed.
 
 This check runs before the UAC launcher. When the correct driver and device
 are already available, `installDriver()` returns without displaying a UAC
@@ -335,27 +365,6 @@ process.once('SIGINT', () => {
 
 The Linux backend uses `/dev/uinput` directly.
 
-Install the native build prerequisites on Debian or Ubuntu:
-
-```sh
-sudo apt update
-sudo apt install build-essential python3
-```
-
-Load the uinput kernel module and grant the current user access:
-
-```sh
-sudo modprobe uinput
-sudo usermod -aG input "$USER"
-```
-
-Log out and back in after changing group membership, then build and run:
-
-```sh
-npm install
-npm start
-```
-
 If `/dev/uinput` is unavailable, check that the module is loaded and that the
 process has read/write access. A uinput device is an evdev device; it is not
 Linux XInput.
@@ -378,80 +387,23 @@ Confirm the complete device GUID and element indices with the SDL version and
 test utility used by the target game. Games that do not accept custom
 mappings must provide their own mapping.
 
-## Windows setup
+## Windows driver setup
 
-The Windows backend uses the MIT-licensed [WinUHid project](https://github.com/cgutman/WinUHid):
+CrossPad includes the MIT-licensed [WinUHid project](https://github.com/cgutman/WinUHid).
+The Windows backend needs both the runtime DLLs and the UMDF2 driver installed
+on the machine.
 
-- `WinUHid.dll` is the user-mode WinUHid client library.
-- `WinUHidDevs.dll` contains the upstream Xbox One preset.
-- `WinUHidDriver.dll` is the UMDF2 driver installed by the setup script.
-
-WinUHid is user-mode from an implementation perspective, but it is still a
-Windows device driver and requires installation into the driver store. A DLL
-copied beside the Node application cannot replace that installation.
-
-Install these prerequisites:
-
-- Visual Studio 2022 Build Tools with the C++ build tools, or a tested
-  Visual Studio 2026 Build Tools installation
-- Windows SDK
-- Windows Driver Kit (Sometimes also called Windows Driver Kit Build Tools)
-- x64 Spectre-mitigated libraries if MSBuild reports `MSB8040`
-
-Visual Studio 2026 can be used if the installed WDK supports it. The vendored
-WinUHid user-library projects currently request the VS2022 `v143` toolset, so
-keep the VS2022 C++ toolset installed or migrate those projects to the
-VS2026 toolset and test the complete driver build. MSBuild discovery is
-automatic; the script uses `PATH`, `vswhere`, and known installation paths.
-
-Build and install the local WinUHid driver:
-
-```powershell
-pnpm run build:windows
-```
-
-To build the driver without installing it, use the CI-safe flow:
-
-```powershell
-pnpm run build
-pnpm run build:winuhid -- -InstallDriver:$false -SkipDeviceVerification
-pnpm run stage:windows
-pnpm run verify:build
-```
-
-The verification checks that these artifacts exist and are packaged correctly:
-
-```text
-vendor/WinUHid/bin/win32-x64/WinUHid.dll
-vendor/WinUHid/bin/win32-x64/WinUHidDevs.dll
-vendor/WinUHid/package/WinUHidDriver.dll
-vendor/WinUHid/package/WinUHidDriver.inf
-vendor/WinUHid/package/winuhiddriver.cat
-```
-
-The Node.js installer requires administrator privileges because it creates the
-root-enumerated WinUHid device. It also verifies the `\\.\WinUHid` interface.
-The development build uses a WDK test certificate and is intended only for
-local development. Production distribution requires a production-trusted
-driver signature; do not silently trust a developer certificate on a user's
-machine.
-
-The bundled DLLs are selected automatically. To use local builds instead:
+For local debugging, you can also override the bundled WinUHid libraries:
 
 ```powershell
 $env:WINUHID_DLL = 'C:\path\to\WinUHid.dll'
 $env:WINUHID_DEVS_DLL = 'C:\path\to\WinUHidDevs.dll'
-pnpm start
+npm start
 ```
 
-`stage:windows` copies the addon from `build\Release\` into `prebuilds\`.
-`verify:build` checks file presence, INF structure, package import, and npm
-package contents. Both commands return a non-zero exit code on failure and are
-used by CI.
-
-If `connect()` reports Windows error 2, the driver package is not installed,
-the device interface is unavailable, or Windows rejected the driver
-signature. Check Device Manager and the setup output.
+If a controller fails to connect on Windows, make sure the driver is installed,
+the `\\.\WinUHid` interface exists, and the system is not blocking the
+signature or driver install.
 
 ## Compatibility limitations
 
