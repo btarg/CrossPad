@@ -34,6 +34,7 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      - uses: microsoft/setup-msbuild@v2
       - run: npm install
       - run: npm test
       - run: npm run build
@@ -45,8 +46,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'WinUHid build/package step failed.'
           }
-          New-Item -ItemType Directory -Force -Path 'prebuilds\win32-x64' | Out-Null
-          Copy-Item -LiteralPath 'build\Release\virtual_x360.node' -Destination 'prebuilds\win32-x64\' -Force
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\stage-native.ps1
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Native addon staging failed.'
+          }
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\verify-build.ps1
           if ($LASTEXITCODE -ne 0) {
             throw 'Build verification failed.'

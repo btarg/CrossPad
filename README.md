@@ -20,14 +20,13 @@ so no separate `@types` package is required.
 
 Install dependencies and build the native addon:
 
-```sh
-npm install
-npm run build
+```powershell
+pnpm install
+pnpm run build
 ```
 
-`npm install` runs the native build through the package's install script.
-Run `npm run build` when rebuilding after changing native source files.
-pnpm is optional and can be used instead if you prefer it.
+`pnpm install` runs the native build through the package's install script.
+Run `pnpm run build` after changing native source files.
 
 ## Installing from npm
 
@@ -36,7 +35,7 @@ x64, plus the Windows WinUHid user libraries. A consumer does not need a
 compiler for those platforms:
 
 ```sh
-npm install crosspad
+pnpm add crosspad
 ```
 
 The package selects the native addon for the current `process.platform` and
@@ -45,60 +44,31 @@ with the signed driver package and administrator privileges; shipping a DLL
 alone cannot install a Windows device driver. The package exposes an explicit
 `installDriver()` helper for this setup step.
 
-The repository's [GitHub Actions workflow](.github/workflows/package.yml)
-rebuilds both platform addons, builds and packages the WinUHid user libraries
-and driver on Windows, checks the npm tarball, and publishes version tags of the form `v1.2.3` when
-the `NPM_TOKEN` repository secret is configured. Pull requests build and
-inspect the package without publishing it.
+The [GitHub Actions workflow](.github/workflows/package.yml) builds both
+platforms, generates the Windows driver artifacts, verifies the package, and
+publishes version tags when `NPM_TOKEN` is configured. Generated artifacts are
+not committed to Git.
 
-Generated Windows driver files are not committed to Git. The Windows CI job
-builds `WinUHidDriver.dll`, its INF, and catalog, uploads them with the other
-runtime artifacts, and the package job assembles the final npm tarball from
-those artifacts.
-
-To test the exact package locally before publishing:
-
-```sh
-npm pack
-```
-
-This creates a tarball in the repository directory. Install that tarball into
-a separate temporary project using Node.js 18 or newer:
+To test the exact package locally, create a tarball and install it in a
+separate Node.js 18+ project:
 
 ```sh
 mkdir /tmp/crosspad-package-test
 cd /tmp/crosspad-package-test
-npm init -y
-npm install /absolute/path/to/crosspad-0.1.0.tgz
+pnpm init
+pnpm install /absolute/path/to/crosspad-0.1.0.tgz
 node -e "const p=require('crosspad'); console.log(Object.keys(p))"
 ```
 
-The install should use the prebuilt addon without compiling. The package
-loader selects:
+Create the tarball with `pnpm pack`. Inspect its contents without creating a
+tarball with:
 
-```text
-prebuilds/linux-x64/virtual_x360.node
-prebuilds/win32-x64/virtual_x360.node
+```powershell
+pnpm pack --dry-run
 ```
 
-On Windows, the published package also contains:
-
-```text
-vendor/WinUHid/bin/win32-x64/WinUHid.dll
-vendor/WinUHid/bin/win32-x64/WinUHidDevs.dll
-```
-
-You can inspect the exact tarball contents without creating it permanently:
-
-```sh
-npm pack --dry-run
-```
-
-After a GitHub Actions run completes, download the `linux-package-files` or
-`windows-package-files` artifact from the workflow run's **Artifacts** section.
-The release `package` job combines those files with the checked-out source and
-verifies the final npm tarball. A tag build publishes the same package when
-`NPM_TOKEN` is configured.
+The package contains a platform-specific addon under `prebuilds/` and, on
+Windows, the WinUHid runtime DLLs and driver package.
 
 ## Xbox One-style controller
 
@@ -422,24 +392,34 @@ copied beside the Node application cannot replace that installation.
 
 Install these prerequisites:
 
-- Visual Studio 2022 Build Tools with the C++ build tools
+- Visual Studio 2022 Build Tools with the C++ build tools, or a tested
+  Visual Studio 2026 Build Tools installation
 - Windows SDK
-- Windows Driver Kit (WDK), including the UMDF tools
+- Windows Driver Kit (Sometimes also called Windows Driver Kit Build Tools)
 - x64 Spectre-mitigated libraries if MSBuild reports `MSB8040`
 
-Build the addon and build/install the local WinUHid driver:
+Visual Studio 2026 can be used if the installed WDK supports it. The vendored
+WinUHid user-library projects currently request the VS2022 `v143` toolset, so
+keep the VS2022 C++ toolset installed or migrate those projects to the
+VS2026 toolset and test the complete driver build. MSBuild discovery is
+automatic; the script uses `PATH`, `vswhere`, and known installation paths.
+
+Build and install the local WinUHid driver:
 
 ```powershell
-npm run build:windows
+pnpm run build:windows
 ```
 
-Or build only the WinUHid libraries and driver:
+To build the driver without installing it, use the CI-safe flow:
 
 ```powershell
-npm run build:winuhid
+pnpm run build
+pnpm run build:winuhid -- -InstallDriver:$false -SkipDeviceVerification
+pnpm run stage:windows
+pnpm run verify:build
 ```
 
-The script builds and bundles:
+The verification checks that these artifacts exist and are packaged correctly:
 
 ```text
 vendor/WinUHid/bin/win32-x64/WinUHid.dll
@@ -464,19 +444,10 @@ $env:WINUHID_DEVS_DLL = 'C:\path\to\WinUHidDevs.dll'
 pnpm start
 ```
 
-To verify a Windows build before importing it from another project, run:
-
-```powershell
-pnpm run verify:build
-```
-
-The verification script checks that the native addon, WinUHid runtime DLLs,
-UMDF driver DLL, INF, and catalog exist in their package locations, validates
-the driver INF references its catalog, imports the package through
-`require('./')`, and confirms all required files are included by `npm pack`.
-It exits with a non-zero status when any check fails, so it can also be used
-as a CI step. The Windows CI build runs this verification before uploading
-its artifacts.
+`stage:windows` copies the addon from `build\Release\` into `prebuilds\`.
+`verify:build` checks file presence, INF structure, package import, and npm
+package contents. Both commands return a non-zero exit code on failure and are
+used by CI.
 
 If `connect()` reports Windows error 2, the driver package is not installed,
 the device interface is unavailable, or Windows rejected the driver

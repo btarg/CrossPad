@@ -9,7 +9,9 @@
     "build": "node-gyp rebuild",
     "build:winuhid": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-winuhid.ps1",
     "build:windows": "node-gyp rebuild && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-winuhid.ps1",
+    "stage:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-native.ps1",
     "verify:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-build.ps1",
+    "build:verify": "pnpm run verify:build",
     "start": "node examples/hello-world.js",
     "test": "node --test",
     "pack:check": "npm pack --dry-run"

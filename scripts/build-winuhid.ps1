@@ -66,18 +66,29 @@ if ($InstallOnly) {
 }
 
 $msbuild = $null
+$pathMsbuild = Get-Command msbuild.exe -ErrorAction SilentlyContinue
+if ($pathMsbuild) {
+  $msbuild = $pathMsbuild.Source
+}
+
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $candidates = @(
   'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe',
   'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
 )
+if (Test-Path -LiteralPath $vswhere) {
+  $vsPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+  if ($LASTEXITCODE -eq 0 -and $vsPath) {
+    $candidates += Join-Path $vsPath 'MSBuild\Current\Bin\MSBuild.exe'
+  }
+}
 foreach ($candidate in $candidates) {
-  if (Test-Path -LiteralPath $candidate) {
+  if (-not $msbuild -and (Test-Path -LiteralPath $candidate)) {
     $msbuild = $candidate
-    break
   }
 }
 if (-not $msbuild) {
-  throw 'MSBuild was not found. Install Visual Studio Build Tools 2022.'
+  throw 'MSBuild was not found. Install Visual Studio Build Tools 2022/2026 or make it available through setup-msbuild.'
 }
 
 & $msbuild $userProject /p:Configuration=Release /p:Platform=x64 /m
