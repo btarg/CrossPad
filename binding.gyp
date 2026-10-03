@@ -10,6 +10,12 @@
           {
             "cflags_cc": [ "-fexceptions" ]
           }
+        ],
+        [
+          "OS=='win'",
+          {
+            "libraries": [ "Shell32.lib" ]
+          }
         ]
       ],
       "msvs_settings": {

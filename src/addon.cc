@@ -20,6 +20,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <shellapi.h>
 #endif
 
 namespace {
@@ -618,10 +619,81 @@ napi_value CreateController(napi_env env, napi_callback_info info) {
   return object;
 }
 
+napi_value InstallDriver(napi_env env, napi_callback_info info) {
+#ifndef _WIN32
+  Throw(env, "The WinUHid driver can only be installed on Windows.");
+  return nullptr;
+#else
+  size_t argc = 2;
+  napi_value args[2];
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  if (argc != 2) {
+    Throw(env, "installDriver requires the Node executable and installer path.");
+    return nullptr;
+  }
+
+  auto to_wide = [&](napi_value value) -> std::wstring {
+    size_t length = 0;
+    napi_get_value_string_utf8(env, value, nullptr, 0, &length);
+    std::string utf8(length, '\0');
+    napi_get_value_string_utf8(env, value, utf8.data(), length + 1, &length);
+    const int wide_length = MultiByteToWideChar(
+        CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+    if (wide_length <= 0) {
+      throw std::runtime_error(WinError("MultiByteToWideChar"));
+    }
+    std::wstring wide(wide_length, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, wide.data(), wide_length);
+    wide.resize(wide_length - 1);
+    return wide;
+  };
+
+  try {
+    const std::wstring node_executable = to_wide(args[0]);
+    const std::wstring installer = to_wide(args[1]);
+    std::wstring parameters = L"\"" + installer + L"\"";
+    SHELLEXECUTEINFOW execute{};
+    execute.cbSize = sizeof(execute);
+    execute.fMask = SEE_MASK_NOCLOSEPROCESS;
+    execute.lpVerb = L"runas";
+    execute.lpFile = node_executable.c_str();
+    execute.lpParameters = parameters.c_str();
+    execute.nShow = SW_SHOWNORMAL;
+
+    if (!ShellExecuteExW(&execute)) {
+      const DWORD error = GetLastError();
+      if (error == ERROR_CANCELLED) {
+        Throw(env, "WinUHid driver installation was cancelled at the UAC prompt.");
+      } else {
+        Throw(env, WinError("ShellExecuteExW").c_str());
+      }
+      return nullptr;
+    }
+
+    WaitForSingleObject(execute.hProcess, INFINITE);
+    DWORD exit_code = 1;
+    GetExitCodeProcess(execute.hProcess, &exit_code);
+    CloseHandle(execute.hProcess);
+
+    napi_value result;
+    napi_create_uint32(env, exit_code, &result);
+    return result;
+  } catch (const std::exception& error) {
+    Throw(env, error.what());
+    return nullptr;
+  }
+#endif
+}
+
 napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor descriptor = {
       "createX360Controller", nullptr, CreateController, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &descriptor);
+#ifdef _WIN32
+  napi_property_descriptor install_descriptor = {
+      "installDriver", nullptr, InstallDriver, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, exports, 1, &install_descriptor);
+#endif
   return exports;
 }
 

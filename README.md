@@ -136,6 +136,10 @@ profile, rotates both analog sticks, moves the D-pad, and cycles A/B/X/Y:
 npm start
 ```
 
+On Windows, the example calls `installDriver()` before connecting. Run it from
+an elevated terminal so it can verify the packaged driver version and install
+or update the driver only when necessary.
+
 ### Installing the Windows driver from Node.js
 
 On Windows x64, install the packaged WinUHid driver before connecting the
@@ -148,23 +152,39 @@ installDriver(); // Requires an already elevated process.
 ```
 
 `installDriver()` is intentionally explicit and only works on Windows x64.
-It runs a Node.js installer that invokes Windows' built-in `pnputil.exe`, creates
-the root-enumerated `Root\WinUHid` device, installs the packaged INF, and
+It runs a Node.js installer that queries Windows with `pnputil.exe`, then
+creates and installs the packaged INF for the root-enumerated
+`Root\WinUHid` device with `devcon.exe`, and
 verifies the `\\.\WinUHid` device interface. The calling process must already
-be running as administrator; Node.js cannot bypass Windows UAC by itself.
+be running on Windows with a user account allowed to approve UAC. The native
+Windows launcher starts the installer with the standard UAC `runas` verb, so
+the main Node.js process does not need to be elevated beforehand.
 Before installing, it compares the packaged INF `DriverVer` value with the
-installed `Root\WinUHid` driver version and skips the installation when they
-match. If Windows does not expose a readable version, it safely proceeds with
-the installation.
+installed driver matched by the `Root\WinUHid` hardware ID and skips the
+installation when they match. The device's instance ID may be something like
+`ROOT\SYSTEM\0007`, so the installer does not assume that it is
+`ROOT\WinUHid`. If Windows does not expose a readable version, it safely
+proceeds with the installation.
+
+This check runs before the UAC launcher. When the correct driver and device
+are already available, `installDriver()` returns without displaying a UAC
+prompt.
 The call throws if the process is not elevated, the package is missing driver
 files, Windows rejects the driver signature, or installation cannot be
 completed.
 
-For example, start an elevated terminal with **Run as administrator** and run
-the application from that terminal. This avoids PowerShell and does not use
+The installer requires `devcon.exe` from the Windows SDK or WDK because the
+`pnputil.exe` version shipped on some Windows installations does not support
+the `/add-device` command. It searches the system PATH and standard Windows
+SDK/WDK tool directories.
+When an update is required, it removes the existing WinUHid device instance
+before recreating it, matching the upstream local setup script.
+
+For example, run the application normally. Windows should display the standard
+administrator-consent prompt. This avoids PowerShell and does not use
 `ExecutionPolicy Bypass`:
 
-```powershell
+```text
 node app.js
 ```
 

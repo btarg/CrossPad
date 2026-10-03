@@ -97,6 +97,32 @@ function installDriver() {
     throw new Error(`The packaged WinUHid driver installer was not found: ${installer}`);
   }
 
+  if (process.platform === 'win32') {
+    const check = spawnSync(process.execPath, [installer, '--check'], {
+      stdio: 'inherit'
+    });
+    if (check.error) {
+      throw check.error;
+    }
+    if (check.status === 0) {
+      return;
+    }
+    if (check.status !== 1) {
+      throw new Error(`WinUHid driver check failed with exit code ${check.status}.`);
+    }
+
+    if (typeof native.installDriver !== 'function') {
+      throw new Error(
+        'The native addon does not include UAC driver installation support. Rebuild the addon with the current package.'
+      );
+    }
+    const result = { status: native.installDriver(process.execPath, installer) };
+    if (result.status !== 0) {
+      throw new Error(`WinUHid driver installation failed with exit code ${result.status}.`);
+    }
+    return;
+  }
+
   const result = spawnSync(process.execPath, [installer], { stdio: 'inherit' });
 
   if (result.error) {

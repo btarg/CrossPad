@@ -1,6 +1,12 @@
 'use strict';
 
-const { createXboxOneController } = require('..');
+const { createXboxOneController, installDriver } = require('..');
+
+if (process.platform === 'win32') {
+  console.log('Checking the installed WinUHid driver...');
+  installDriver();
+}
+
 const controller = createXboxOneController();
 const buttons = ['A', 'B', 'X', 'Y'];
 
