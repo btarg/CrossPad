@@ -624,11 +624,11 @@ napi_value InstallDriver(napi_env env, napi_callback_info info) {
   Throw(env, "The WinUHid driver can only be installed on Windows.");
   return nullptr;
 #else
-  size_t argc = 2;
-  napi_value args[2];
+  size_t argc = 3;
+  napi_value args[3];
   napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
-  if (argc != 2) {
-    Throw(env, "installDriver requires the Node executable and installer path.");
+  if (argc < 2 || argc > 3) {
+    Throw(env, "driver elevation requires the Node executable, installer path, and optional mode.");
     return nullptr;
   }
 
@@ -652,6 +652,10 @@ napi_value InstallDriver(napi_env env, napi_callback_info info) {
     const std::wstring node_executable = to_wide(args[0]);
     const std::wstring installer = to_wide(args[1]);
     std::wstring parameters = L"\"" + installer + L"\"";
+    if (argc == 3) {
+      parameters += L" ";
+      parameters += to_wide(args[2]);
+    }
     SHELLEXECUTEINFOW execute{};
     execute.cbSize = sizeof(execute);
     execute.fMask = SEE_MASK_NOCLOSEPROCESS;
@@ -663,7 +667,7 @@ napi_value InstallDriver(napi_env env, napi_callback_info info) {
     if (!ShellExecuteExW(&execute)) {
       const DWORD error = GetLastError();
       if (error == ERROR_CANCELLED) {
-        Throw(env, "WinUHid driver installation was cancelled at the UAC prompt.");
+        Throw(env, "WinUHid driver operation was cancelled at the UAC prompt.");
       } else {
         Throw(env, WinError("ShellExecuteExW").c_str());
       }
@@ -693,6 +697,9 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor install_descriptor = {
       "installDriver", nullptr, InstallDriver, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &install_descriptor);
+  napi_property_descriptor uninstall_descriptor = {
+      "uninstallDriver", nullptr, InstallDriver, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, exports, 1, &uninstall_descriptor);
 #endif
   return exports;
 }

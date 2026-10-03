@@ -15,6 +15,7 @@ const driverPackage = path.join(__dirname, '..', 'vendor', 'WinUHid', 'package')
 const inf = path.join(driverPackage, 'WinUHidDriver.inf');
 const catalog = path.join(driverPackage, 'winuhiddriver.cat');
 const driver = path.join(driverPackage, 'WinUHidDriver.dll');
+const elevated = process.argv.includes('--elevated');
 
 for (const file of [inf, catalog, driver]) {
   if (!fs.existsSync(file)) {
@@ -73,6 +74,34 @@ function isDeviceReady() {
     return true;
   } catch {
     return false;
+  }
+}
+
+function elevate(mode) {
+  const candidates = [
+    path.join(__dirname, '..', 'prebuilds', 'win32-x64', 'virtual_x360.node'),
+    path.join(__dirname, '..', 'build', 'Release', 'virtual_x360.node')
+  ];
+  const nativePath = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!nativePath) {
+    throw new Error(
+      'The native addon is required to request UAC elevation. Build the package before running the driver installer directly.'
+    );
+  }
+
+  const native = require(nativePath);
+  const elevateDriver = mode === '--uninstall'
+    ? native.uninstallDriver
+    : native.installDriver;
+  if (typeof elevateDriver !== 'function') {
+    throw new Error(
+      'The native addon does not include UAC driver installation support. Rebuild the addon with the current package.'
+    );
+  }
+
+  const status = elevateDriver(process.execPath, __filename, `${mode} --elevated`);
+  if (status !== 0) {
+    throw new Error(`WinUHid driver operation failed with exit code ${status}.`);
   }
 }
 
@@ -136,6 +165,109 @@ function createRootDevice() {
   }
 }
 
+function uninstallDriver() {
+  const devcon = findDevcon();
+  if (!devcon) {
+    throw new Error(
+      'devcon.exe was not found. Install the Windows SDK/WDK tools before uninstalling WinUHid.'
+    );
+  }
+
+  const devices = queryWinUhidDevices();
+  for (const instanceId of devices) {
+    console.log(`Removing WinUHid device ${instanceId}...`);
+    const remove = spawnSync(devcon, ['remove', instanceId], {
+      stdio: 'inherit'
+    });
+    if (remove.error) {
+      throw remove.error;
+    }
+    if (remove.status !== 0) {
+      throw new Error(`devcon could not remove ${instanceId} (exit code ${remove.status}).`);
+    }
+  }
+
+  const packages = queryWinUhidPackages();
+  if (packages.size === 0) {
+    console.log('No WinUHid driver-store packages were found.');
+  }
+
+  for (const packageName of packages) {
+    console.log(`Removing driver-store package ${packageName}...`);
+    const result = spawnSync('pnputil.exe', [
+      '/delete-driver',
+      packageName,
+      '/uninstall'
+    ], { stdio: 'inherit' });
+    if (result.error) {
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      throw new Error(
+        `pnputil.exe could not remove ${packageName} (exit code ${result.status}).`
+      );
+    }
+  }
+
+  const remaining = queryWinUhidPackages();
+  if (remaining.size > 0) {
+    throw new Error(
+      `WinUHid driver packages remain installed: ${[...remaining].join(', ')}`
+    );
+  }
+  console.log('WinUHid driver uninstall completed successfully.');
+}
+
+function queryWinUhidDevices() {
+  const result = spawnSync('pnputil.exe', [
+    '/enum-devices',
+    '/deviceid',
+    'Root\\WinUHid'
+  ], { encoding: 'utf8' });
+  if (result.error || result.status !== 0) {
+    return [];
+  }
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  return [...output.matchAll(/^\s*Instance ID:\s*(.+?)\s*$/gim)]
+    .map((match) => match[1])
+    .filter((instanceId) => /^Root\\[^\\]+\\[^\\]+$/i.test(instanceId));
+}
+
+function queryWinUhidPackages() {
+  const result = spawnSync('pnputil.exe', [
+    '/enum-drivers',
+    '/class',
+    'System',
+    '/format',
+    'xml'
+  ], {
+    encoding: 'utf8'
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error('pnputil.exe could not enumerate driver packages in XML format.');
+  }
+
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  const packages = new Set();
+  for (const match of output.matchAll(
+    /<Driver\b[^>]*\bDriverName="(oem\d+\.inf)"[^>]*>([\s\S]*?)<\/Driver>/gi
+  )) {
+    if (/<OriginalName>\s*winuhiddriver\.inf\s*<\/OriginalName>/i.test(match[2])) {
+      packages.add(match[1]);
+    }
+  }
+  return packages;
+}
+
+if (process.argv.includes('--uninstall')) {
+  if (!elevated) {
+    elevate('--uninstall');
+    process.exit(0);
+  }
+  uninstallDriver();
+  process.exit(0);
+}
+
 const packagedVersion = readPackagedDriverVersion();
 const installedVersion = queryInstalledDriver();
 const driverIsCurrent = isDeviceReady() && installedVersion === packagedVersion;
@@ -150,6 +282,11 @@ if (process.argv.includes('--check')) {
 
 if (driverIsCurrent) {
   console.log(`WinUHid driver ${packagedVersion} is already installed.`);
+  process.exit(0);
+}
+
+if (!elevated) {
+  elevate('--install');
   process.exit(0);
 }
 

@@ -116,7 +116,9 @@ function installDriver() {
         'The native addon does not include UAC driver installation support. Rebuild the addon with the current package.'
       );
     }
-    const result = { status: native.installDriver(process.execPath, installer) };
+    const result = {
+      status: native.installDriver(process.execPath, installer, '--elevated')
+    };
     if (result.status !== 0) {
       throw new Error(`WinUHid driver installation failed with exit code ${result.status}.`);
     }
@@ -133,9 +135,38 @@ function installDriver() {
   }
 }
 
+function uninstallDriver() {
+  if (process.platform !== 'win32') {
+    throw new Error('The WinUHid driver can only be uninstalled on Windows.');
+  }
+  if (process.arch !== 'x64') {
+    throw new Error(`The WinUHid driver uninstaller supports Windows x64, not ${process.arch}.`);
+  }
+
+  const installer = path.join(__dirname, 'scripts', 'install-driver.js');
+  if (!fs.existsSync(installer)) {
+    throw new Error(`The packaged WinUHid driver uninstaller was not found: ${installer}`);
+  }
+  if (typeof native.uninstallDriver !== 'function') {
+    throw new Error(
+      'The native addon does not include UAC driver uninstallation support. Rebuild the addon with the current package.'
+    );
+  }
+
+  const status = native.uninstallDriver(
+    process.execPath,
+    installer,
+    '--uninstall --elevated'
+  );
+  if (status !== 0) {
+    throw new Error(`WinUHid driver uninstallation failed with exit code ${status}.`);
+  }
+}
+
 module.exports = {
   X360Controller,
   createX360Controller: () => new X360Controller('generic'),
   createXboxOneController: () => new X360Controller('xbox-one'),
-  installDriver
+  installDriver,
+  uninstallDriver
 };

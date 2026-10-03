@@ -208,6 +208,29 @@ const pad = createXboxOneController();
 pad.connect();
 ```
 
+To remove the virtual device and all matching `winuhiddriver.inf` packages
+from the Windows driver store, use the corresponding uninstall helper:
+
+```js
+const { uninstallDriver } = require('crosspad');
+
+uninstallDriver(); // Opens the Windows administrator-consent prompt.
+```
+
+`uninstallDriver()` removes existing WinUHid device instances with `devcon`
+and removes every matching published driver package with
+`pnputil /delete-driver /uninstall`. It is Windows x64 only, requires
+administrator approval, and should be used when no application is connected
+to a virtual controller.
+
+The packaged `scripts/install-driver.js` entry point can also be run directly.
+It performs the same preflight and requests UAC elevation itself:
+
+```powershell
+node scripts\install-driver.js
+node scripts\install-driver.js --uninstall
+```
+
 The package must contain a production-trusted WinUHid driver package for
 end-user installation. The development certificate produced by the local WDK
 build is only for development and must not be silently trusted or distributed
