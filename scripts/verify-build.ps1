@@ -81,24 +81,28 @@ if (-not $SkipImportTest) {
 
 if (-not $SkipPackageTest) {
   Push-Location $rootPath
+  $stdoutPath = Join-Path ([System.IO.Path]::GetTempPath()) "crosspad-npm-pack-$([System.Guid]::NewGuid()).json"
   $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) "crosspad-npm-pack-$([System.Guid]::NewGuid()).log"
   try {
-    $npmCommand = if ($IsWindows -or $env:OS -eq 'Windows_NT') {
-      'npm.cmd'
-    } else {
-      'npm'
-    }
-    $packOutput = & $npmCommand pack --dry-run --json 2> $stderrPath
-    if ($LASTEXITCODE -ne 0) {
+    $npmCommand = if ($env:OS -eq 'Windows_NT') { 'npm.cmd' } else { 'npm' }
+    $packProcess = Start-Process -FilePath $npmCommand `
+      -ArgumentList @('pack', '--dry-run', '--json') `
+      -WorkingDirectory $rootPath `
+      -RedirectStandardOutput $stdoutPath `
+      -RedirectStandardError $stderrPath `
+      -NoNewWindow `
+      -Wait `
+      -PassThru
+    if ($packProcess.ExitCode -ne 0) {
       $details = if (Test-Path -LiteralPath $stderrPath) {
         Get-Content -LiteralPath $stderrPath -Raw
       } else {
         ''
       }
-      throw "npm pack --dry-run failed with exit code $LASTEXITCODE. $details"
+      throw "npm pack --dry-run failed with exit code $($packProcess.ExitCode). $details"
     }
 
-    $packJson = ($packOutput -join "`n") | ConvertFrom-Json
+    $packJson = Get-Content -LiteralPath $stdoutPath -Raw | ConvertFrom-Json
     $packNames = @($packJson.files | ForEach-Object { $_.path })
     foreach ($relativePath in $requiredFiles) {
       $packagePath = $relativePath -replace '\\', '/'
@@ -109,6 +113,9 @@ if (-not $SkipPackageTest) {
     Write-Host 'Verified required artifacts are included in npm pack output.'
   } finally {
     Pop-Location
+    if (Test-Path -LiteralPath $stdoutPath) {
+      Remove-Item -LiteralPath $stdoutPath -Force
+    }
     if (Test-Path -LiteralPath $stderrPath) {
       Remove-Item -LiteralPath $stderrPath -Force
     }
