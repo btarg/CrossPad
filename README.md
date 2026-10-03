@@ -1,168 +1,263 @@
-# Native X360 controller
+# CrossPad
 
-This is a small Node.js native addon that creates a virtual Xbox 360-style
-gamepad without ViGEm. It deliberately keeps the JavaScript API close to
-`node-ViGEmClient` while putting the OS-specific device implementation behind
-the addon boundary.
+Cross-platform Node.js bindings for creating virtual gamepads. CrossPad
+provides a Linux `uinput` backend and a Windows WinUHid backend, with an
+Xbox One-style controller profile available on both platforms.
 
-## Linux
+CrossPad does not use ViGEm. The JavaScript API is intentionally small and
+works with the same button and axis state on each supported platform.
 
-The included backend uses `/dev/uinput` directly. Install the kernel uinput
-module and give the running user access to `/dev/uinput` (for example through
-the `uinput` group), then:
+## Requirements
+
+### All platforms
+
+- Node.js 18 or newer
+- pnpm 12 or newer
+- A C++17 compiler supported by `node-gyp`
+- Python 3
+
+Install dependencies and build the native addon:
+
+```sh
+pnpm install
+pnpm build
+```
+
+`pnpm install` runs the native build through the package's install script.
+Run `pnpm build` when rebuilding after changing native source files.
+
+## Xbox One-style controller
+
+Use the explicit Xbox One factory:
+
+```js
+const { createXboxOneController } = require('native-x360-pad');
+
+const pad = createXboxOneController();
+pad.updateMode = 'manual';
+pad.connect();
+
+pad.button.A.setValue(true);
+pad.axis.leftX.setValue(-1);
+pad.axis.leftTrigger.setValue(0.75);
+pad.update();
+
+pad.button.A.setValue(false);
+pad.disconnect();
+```
+
+The included [hello-world example](examples/hello-world.js) creates this
+profile, rotates both analog sticks, moves the D-pad, and cycles A/B/X/Y:
+
+```sh
+pnpm start
+```
+
+`createXboxOneController()` uses the MIT-licensed upstream WinUHidDevs Xbox
+One preset on Windows. On Linux it creates an evdev/uinput device named
+`Xbox One Controller` with vendor/product ID `045e:02ff`.
+
+The default factory remains available:
+
+```js
+const { createX360Controller } = require('native-x360-pad');
+const pad = createX360Controller();
+```
+
+The default uses the generic HID/uinput profile and is not the Xbox One
+preset.
+
+## JavaScript API
+
+### Factories
+
+```js
+const {
+  createX360Controller,
+  createXboxOneController
+} = require('native-x360-pad');
+```
+
+Both factories return a controller with:
+
+```js
+pad.connect();
+pad.disconnect();
+pad.update();
+pad.resetInputs();
+```
+
+Set `updateMode` to `auto` (the default) to submit every input change, or to
+`manual` to batch changes and call `update()` yourself:
+
+```js
+pad.updateMode = 'manual';
+pad.axis.leftX.setValue(-1);
+pad.axis.leftY.setValue(0.5);
+pad.button.A.setValue(true);
+pad.update();
+```
+
+Available buttons:
+
+```text
+START BACK LEFT_THUMB RIGHT_THUMB LEFT_SHOULDER RIGHT_SHOULDER
+GUIDE A B X Y
+```
+
+Available axes:
+
+```text
+leftX leftY rightX rightY
+leftTrigger rightTrigger
+dpadHorz dpadVert
+```
+
+Stick values use `-1` to `1`. Trigger values use `0` to `1`. D-pad axes use
+negative, zero, and positive values.
+
+Always disconnect the controller during shutdown:
+
+```js
+process.once('SIGINT', () => {
+  pad.resetInputs();
+  pad.disconnect();
+  process.exit(0);
+});
+```
+
+## Linux setup
+
+The Linux backend uses `/dev/uinput` directly.
+
+Install the native build prerequisites on Debian or Ubuntu:
+
+```sh
+sudo apt update
+sudo apt install build-essential python3
+```
+
+Load the uinput kernel module and grant the current user access:
+
+```sh
+sudo modprobe uinput
+sudo usermod -aG input "$USER"
+```
+
+Log out and back in after changing group membership, then build and run:
 
 ```sh
 pnpm install
 pnpm start
 ```
 
-The device is an Xbox-style Linux input device. `inputtino` can replace the
-direct uinput implementation later without changing the JavaScript API.
+If `/dev/uinput` is unavailable, check that the module is loaded and that the
+process has read/write access. A uinput device is an evdev device; it is not
+Linux XInput.
 
-## Windows / WinUHid
+### SDL on Linux
 
-The addon now includes a WinUHid backend. It loads `WinUHid.dll` at runtime,
-creates a generic HID joystick report, and submits the same button/stick/trigger
-state as the Linux backend. The Windows report intentionally uses a minimal
-conventional joystick layout rather than the Gamepad usage that caused
-Windows Gaming Input crashes.
-The D-pad is represented as four additional HID buttons, allowing SDL3 menu
-navigation without relying on a Windows hat-switch parser.
-This does not link ViGEm.
+SDL's joystick API should enumerate the device. SDL's Gamepad API is
+mapping-driven, however, and individual games may require a mapping for the
+device GUID. A uinput device cannot implement Microsoft's proprietary XInput
+protocol.
 
-An opt-in Xbox One HID backend is also included. It uses the MIT-licensed
-upstream `WinUHidDevs` Xbox One preset rather than a locally recreated
-descriptor:
-
-```js
-const { createXboxOneController } = require('native-x360-pad');
-const pad = createXboxOneController();
-pad.connect();
-```
-
-The preset uses the upstream Xbox One HID descriptor, report layout, hat
-switch encoding, and device identity (`045e:02ff`). This is an Xbox One-style
-HID/GameInput device, not an XUSB bus device, so applications that require
-exclusive XInput support may still not detect it. The generic backend remains
-the default for `createX360Controller()`.
-
-On Linux, `createXboxOneController()` creates an evdev/uinput device named
-`Xbox One Controller` with vendor/product `045e:02ff` and the standard gamepad
-button and axis events. SDL's joystick API should enumerate it, but SDL's
-Gamepad API is mapping-driven: a game must contain or load a mapping for that
-device GUID. A uinput device cannot create Microsoft's XInput protocol, so
-there is no library-side way to guarantee detection by every SDL game.
-
-For SDL applications you control, load an explicit mapping after opening SDL:
+For an SDL application that accepts custom mappings, the CrossPad Xbox One
+layout is:
 
 ```text
-030000005e040000ff02000000007800,Xbox One Controller,a:b7,b:b8,x:b9,y:b10,back:b1,guide:b6,start:b0,leftstick:b2,rightstick:b3,leftshoulder:b4,rightshoulder:b5,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,dpup:-a7,dpdown:+a7,dpleft:-a6,dpright:+a6,
+a:b7,b:b8,x:b9,y:b10,back:b1,guide:b6,start:b0,leftstick:b2,rightstick:b3,leftshoulder:b4,rightshoulder:b5,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,dpup:-a7,dpdown:+a7,dpleft:-a6,dpright:+a6
 ```
 
-The exact GUID and element indices must be confirmed with the target SDL
-version's joystick test utility. Games that do not accept custom mappings must
-ship their own mapping or use SDL's joystick API instead of assuming every
-device is an Xbox controller.
+Confirm the complete device GUID and element indices with the SDL version and
+test utility used by the target game. Games that do not accept custom
+mappings must provide their own mapping.
 
-WinUHid still requires its separately built and signed **UMDF2** driver package
-to be installed. UMDF2 is user-mode, but the package is still a system driver
-and cannot be replaced by a DLL copied next to the Node application. Build and
-install the WinUHid driver and user library from
-[WinUHid](https://github.com/cgutman/WinUHid), then make `WinUHid.dll`
-available on `PATH` or beside the Node executable.
+## Windows setup
 
-The addon also accepts an explicit DLL path. This is useful when testing a
-local build:
+The Windows backend uses the MIT-licensed [WinUHid project](https://github.com/cgutman/WinUHid):
+
+- `WinUHid.dll` is the user-mode WinUHid client library.
+- `WinUHidDevs.dll` contains the upstream Xbox One preset.
+- `WinUHidDriver.dll` is the UMDF2 driver installed by the setup script.
+
+WinUHid is user-mode from an implementation perspective, but it is still a
+Windows device driver and requires installation into the driver store. A DLL
+copied beside the Node application cannot replace that installation.
+
+Install these prerequisites:
+
+- Visual Studio 2022 Build Tools with the C++ build tools
+- Windows SDK
+- Windows Driver Kit (WDK), including the UMDF tools
+- x64 Spectre-mitigated libraries if MSBuild reports `MSB8040`
+
+Build the addon and build/install the local WinUHid driver:
 
 ```powershell
-$env:WINUHID_DLL = 'C:\path\to\WinUHid\x64\Release\WinUHid.dll'
-pnpm build
-pnpm start
+pnpm build:windows
 ```
 
-The MIT-licensed user-mode and UMDF2 driver source is vendored under
-[`vendor/WinUHid`](vendor/WinUHid). The Windows setup command automatically
-builds the DLL and driver, requests administrator elevation, installs the
-driver package, and verifies the device interface:
+Or build only the WinUHid libraries and driver:
 
 ```powershell
 pnpm build:winuhid
 ```
 
-The package then loads
-`vendor/WinUHid/bin/win32-x64/WinUHid.dll` automatically. The DLL is
-redistributed under the MIT license; see
-[`vendor/WinUHid/LICENSE`](vendor/WinUHid/LICENSE).
-`pnpm build:winuhid` also builds and bundles
-`vendor/WinUHid/bin/win32-x64/WinUHidDevs.dll`, which contains the upstream
-MIT-licensed Xbox One preset.
+The script builds and bundles:
 
-The command requires the WDK UMDF toolset and a valid driver signature. It is
-intentionally not part of `pnpm install`; ordinary dependency installation
-must not silently modify Windows drivers. Use `pnpm build:windows` to build the
-Node addon and perform the complete Windows setup in one command.
-
-If the driver build reports `MSB8040`, modify the **Visual Studio 2022 Build
-Tools** installation and add **Libs for Spectre** under **Individual
-components**. For an x64 build, the required files are the x64 Spectre-mitigated
-libraries. The Visual Studio component ID is
-`Microsoft.VisualStudio.Component.VC.SpectreMitigation`.
-
-With WDK 10.0.26100, the build script passes
-`SkipPackageVerification=true` because that WDK release may omit the x86
-`InfVerif.dll` loaded by Visual Studio's package-verification task. Driver
-compilation, catalog generation, and test signing still run; the script then
-checks that the generated driver files exist before attempting installation.
-
-If `connect()` reports Windows error 2 after setup, the driver package was not
-installed successfully or Windows rejected its signature. Check Device
-Manager and the `pnputil` output from the setup command.
-
-The local build uses the WDK's test certificate. The elevated setup step
-imports the generated `WinUHidDriver.cer` into the local machine Root and
-Trusted Publisher stores before installing the driver with `devcon`. This is only suitable for
-development on your own machine. A distributed package must use a
-production-trusted driver signature and should not silently install a
-developer certificate.
-
-The development INF also grants built-in users read/write access to the
-WinUHid control device, so the Node.js process does not need to run elevated.
-
-### XInput limitation
-
-An Xbox 360 controller uses Microsoft's proprietary XUSB protocol; it is not a
-standard HID controller. The Windows backend intentionally uses a
-standards-based gamepad identity rather than spoofing Microsoft's VID/PID.
-This allows SDL3's generic HID backend and browser Gamepad API to enumerate the
-device, but it does not make it an XInput controller. A generic WinUHid device
-cannot become an XInput controller merely by changing its VID/PID or HID
-descriptor.
-
-Useful references:
-
-- [MS-XUSBI protocol specification](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-xusbi/c79474e7-3968-43d1-8d2f-175d47bef43e)
-- [Microsoft: DirectInput and XUSB devices](https://learn.microsoft.com/en-us/windows/win32/xinput/directinput-and-xusb-devices)
-- [Xbox 360 HID descriptor](https://gist.github.com/fendent/5709856)
-
-## JavaScript API
-
-```js
-const { createX360Controller } = require('native-x360-pad');
-const pad = createX360Controller();
-pad.updateMode = 'manual';
-pad.connect();
-pad.button.A.setValue(true);
-pad.axis.leftX.setValue(-1);
-pad.update();
-pad.disconnect();
+```text
+vendor/WinUHid/bin/win32-x64/WinUHid.dll
+vendor/WinUHid/bin/win32-x64/WinUHidDevs.dll
+vendor/WinUHid/package/WinUHidDriver.dll
+vendor/WinUHid/package/WinUHidDriver.inf
+vendor/WinUHid/package/winuhiddriver.cat
 ```
 
-Buttons are `START, BACK, LEFT_THUMB, RIGHT_THUMB, LEFT_SHOULDER,
-RIGHT_SHOULDER, GUIDE, A, B, X, Y`. Axes are `leftX, leftY, rightX, rightY,
-leftTrigger, rightTrigger, dpadHorz, dpadVert`.
+The setup script may request administrator elevation because it creates the
+root-enumerated WinUHid device. It also verifies the `\\.\WinUHid` interface.
+The development build uses a WDK test certificate and is intended only for
+local development. Production distribution requires a production-trusted
+driver signature; do not silently trust a developer certificate on a user's
+machine.
 
-Do not launch the Xbox One backend while Chromium-based applications are open
-until it has been validated on the target Windows installation. HID
-enumeration bugs in an application or Windows Gaming Input can affect every
-process that enumerates the new device. Disconnect the controller and remove
-the WinUHid device with the driver tooling if enumeration causes instability.
+The bundled DLLs are selected automatically. To use local builds instead:
+
+```powershell
+$env:WINUHID_DLL = 'C:\path\to\WinUHid.dll'
+$env:WINUHID_DEVS_DLL = 'C:\path\to\WinUHidDevs.dll'
+pnpm start
+```
+
+If `connect()` reports Windows error 2, the driver package is not installed,
+the device interface is unavailable, or Windows rejected the driver
+signature. Check Device Manager and the setup output.
+
+## Compatibility limitations
+
+The Xbox One profile is an Xbox One-style HID/GameInput device. It is not a
+true XUSB bus device and does not guarantee compatibility with applications
+that exclusively call XInput. A VID/PID or HID descriptor cannot turn a
+generic HID device into an XUSB device.
+
+The Windows generic backend deliberately uses a neutral identity and a
+minimal joystick descriptor. This avoids pretending that a generic HID report
+is an authentic Microsoft XUSB device.
+
+Do not test experimental descriptors with Chromium-based applications open.
+HID enumeration bugs in an application or Windows Gaming Input can affect
+processes that enumerate the device. Disconnect the controller and remove the
+WinUHid device with the driver tooling if enumeration causes instability.
+
+## WinUHid attribution and license
+
+CrossPad includes and builds portions of
+[cgutman/WinUHid](https://github.com/cgutman/WinUHid), including its
+`WinUHidDevs` Xbox One preset. WinUHid is distributed under the MIT License.
+The original license and copyright notice are preserved in
+[vendor/WinUHid/LICENSE](vendor/WinUHid/LICENSE).
+
+The WinUHid source and preset are used directly from the upstream MIT-licensed
+project. CrossPad does not include GPL-licensed Switch2Connect source.
+
+CrossPad itself is distributed under the MIT License.
