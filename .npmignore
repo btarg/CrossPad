@@ -1,0 +1,16 @@
+build/
+node_modules/
+vendor/WinUHid/WinUHid/build/
+vendor/WinUHid/WinUHid/x64/
+vendor/WinUHid/WinUHid Driver/build/
+vendor/WinUHid/WinUHid Driver/x64/
+vendor/WinUHid/**/x64/
+vendor/WinUHid/**/build/
+*.obj
+*.pdb
+*.ipdb
+*.iobj
+*.tlog/
+*.exp
+*.lib
+*.recipe

@@ -1,0 +1,17 @@
+node_modules/
+build/
+npm-debug.log*
+pnpm-debug.log*
+
+# Visual Studio and native build outputs.
+vendor/WinUHid/**/build/
+vendor/WinUHid/**/x64/
+vendor/WinUHid/**/*.obj
+vendor/WinUHid/**/*.pdb
+vendor/WinUHid/**/*.ipdb
+vendor/WinUHid/**/*.iobj
+vendor/WinUHid/**/*.tlog/
+vendor/WinUHid/**/*.exp
+vendor/WinUHid/**/*.lib
+vendor/WinUHid/**/*.recipe
+vendor/WinUHid/**/*.pch

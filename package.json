@@ -1,0 +1,30 @@
+{
+  "name": "native-x360-pad",
+  "version": "0.1.0",
+  "description": "Native virtual Xbox 360-style controller bindings without ViGEm",
+  "main": "index.js",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "build:winuhid": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-winuhid.ps1",
+    "build:windows": "node-gyp rebuild && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-winuhid.ps1",
+    "start": "node examples/hello-world.js",
+    "test": "node --test"
+  },
+  "gypfile": true,
+  "files": [
+    "build/Release/virtual_x360.node",
+    "examples",
+    "index.js",
+    "vendor/WinUHid",
+    "vendor/WinUHid/LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "node-gyp": "^11.0.0"
+  },
+  "packageManager": "pnpm@12.8.1"
+}
