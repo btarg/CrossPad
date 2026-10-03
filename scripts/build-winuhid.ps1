@@ -111,7 +111,7 @@ if (-not (Test-Path -LiteralPath $devicesDll)) {
 }
 Copy-Item -LiteralPath $devicesDll -Destination (Join-Path $output 'WinUHidDevs.dll') -Force
 
-& $msbuild $driverProject /p:Configuration=Release /p:Platform=x64 /p:SkipPackageVerification=true /m
+& $msbuild $driverProject /p:Configuration=Release /p:Platform=x64 /p:SkipPackageVerification=true /p:Inf2CatUseLocalTime=true /m
 if ($LASTEXITCODE -ne 0) {
   throw 'The WinUHid UMDF2 driver build failed. Install the WDK, Visual Studio UMDF tools, and the x64 Spectre-mitigated C++ libraries (Individual components: Libs for Spectre).'
 }
