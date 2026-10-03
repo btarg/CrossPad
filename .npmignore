@@ -14,3 +14,11 @@ vendor/WinUHid/**/build/
 *.exp
 *.lib
 *.recipe
+vendor/WinUHid/**/*.cer
+vendor/WinUHid/package/*.cer
+vendor/WinUHid/WinUHid/build/
+vendor/WinUHid/WinUHid/x64/
+vendor/WinUHid/WinUHidDevs/build/
+vendor/WinUHid/WinUHidDevs/x64/
+vendor/WinUHid/WinUHid Driver/build/
+vendor/WinUHid/WinUHid Driver/x64/

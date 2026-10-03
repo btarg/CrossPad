@@ -12,7 +12,14 @@ if (!process.env.WINUHID_DEVS_DLL && fs.existsSync(bundledWinUhidDevs)) {
   process.env.WINUHID_DEVS_DLL = bundledWinUhidDevs;
 }
 
-const native = require('./build/Release/virtual_x360.node');
+const platformPrebuild = path.join(
+  __dirname,
+  'prebuilds',
+  `${process.platform}-${process.arch}`,
+  'virtual_x360.node'
+);
+const localBuild = path.join(__dirname, 'build', 'Release', 'virtual_x360.node');
+const native = require(fs.existsSync(platformPrebuild) ? platformPrebuild : localBuild);
 
 const buttonNames = [
   'START', 'BACK', 'LEFT_THUMB', 'RIGHT_THUMB', 'LEFT_SHOULDER',

@@ -4,18 +4,26 @@
   "description": "Native virtual Xbox 360-style controller bindings without ViGEm",
   "main": "index.js",
   "scripts": {
+    "install": "node scripts/install-native.js",
     "build": "node-gyp rebuild",
     "build:winuhid": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-winuhid.ps1",
     "build:windows": "node-gyp rebuild && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-winuhid.ps1",
     "start": "node examples/hello-world.js",
-    "test": "node --test"
+    "test": "node --test",
+    "pack:check": "npm pack --dry-run"
   },
   "gypfile": true,
   "files": [
-    "build/Release/virtual_x360.node",
+    "prebuilds",
+    "binding.gyp",
+    "scripts/install-native.js",
+    "src",
     "examples",
     "index.js",
-    "vendor/WinUHid",
+    "vendor/WinUHid/bin",
+    "vendor/WinUHid/package/WinUHidDriver.dll",
+    "vendor/WinUHid/package/WinUHidDriver.inf",
+    "vendor/WinUHid/package/winuhiddriver.cat",
     "vendor/WinUHid/LICENSE",
     "README.md"
   ],
@@ -25,6 +33,5 @@
   "license": "MIT",
   "devDependencies": {
     "node-gyp": "^11.0.0"
-  },
-  "packageManager": "pnpm@12.8.1"
+  }
 }

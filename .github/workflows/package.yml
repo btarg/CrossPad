@@ -1,0 +1,82 @@
+name: Build and package
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install
+      - run: npm test
+      - run: npm run build
+      - run: mkdir -p prebuilds/linux-x64 && cp build/Release/virtual_x360.node prebuilds/linux-x64/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-package-files
+          path: prebuilds/linux-x64/virtual_x360.node
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install
+      - run: npm test
+      - run: npm run build
+      - name: Build WinUHid user libraries
+        shell: pwsh
+        run: |
+          $msbuild = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
+          & $msbuild 'vendor\WinUHid\WinUHid\WinUHid.vcxproj' /p:Configuration=Release /p:Platform=x64 /m
+          if ($LASTEXITCODE -ne 0) { throw 'WinUHid build failed.' }
+          & $msbuild 'vendor\WinUHid\WinUHidDevs\WinUHidDevs.vcxproj' /p:Configuration=Release /p:Platform=x64 /m
+          if ($LASTEXITCODE -ne 0) { throw 'WinUHidDevs build failed.' }
+          New-Item -ItemType Directory -Force -Path 'prebuilds\win32-x64', 'vendor\WinUHid\bin\win32-x64' | Out-Null
+          Copy-Item 'build\Release\virtual_x360.node' 'prebuilds\win32-x64\'
+          Copy-Item 'vendor\WinUHid\WinUHid\build\Release\x64\WinUHid.dll' 'vendor\WinUHid\bin\win32-x64\'
+          Copy-Item 'vendor\WinUHid\WinUHidDevs\build\Release\x64\WinUHidDevs.dll' 'vendor\WinUHid\bin\win32-x64\'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-package-files
+          path: |
+            prebuilds/win32-x64/virtual_x360.node
+            vendor/WinUHid/bin/win32-x64/*.dll
+
+  package:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'pull_request'
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-package-files
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-package-files
+          path: .
+      - run: npm install --ignore-scripts
+      - run: npm run pack:check
+      - name: Publish package
+        if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

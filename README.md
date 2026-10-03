@@ -12,19 +12,84 @@ works with the same button and axis state on each supported platform.
 ### All platforms
 
 - Node.js 18 or newer
-- pnpm 12 or newer
 - A C++17 compiler supported by `node-gyp`
 - Python 3
 
 Install dependencies and build the native addon:
 
 ```sh
-pnpm install
-pnpm build
+npm install
+npm run build
 ```
 
-`pnpm install` runs the native build through the package's install script.
-Run `pnpm build` when rebuilding after changing native source files.
+`npm install` runs the native build through the package's install script.
+Run `npm run build` when rebuilding after changing native source files.
+pnpm is optional and can be used instead if you prefer it.
+
+## Installing from npm
+
+Published releases include prebuilt native addons for Linux x64 and Windows
+x64, plus the Windows WinUHid user libraries. A consumer does not need a
+compiler for those platforms:
+
+```sh
+npm install native-x360-pad
+```
+
+The package selects the native addon for the current `process.platform` and
+`process.arch`. The Windows UMDF2 driver still must be installed separately
+with the signed driver package and administrator privileges; shipping a DLL
+alone cannot install a Windows device driver.
+
+The repository's [GitHub Actions workflow](.github/workflows/package.yml)
+rebuilds both platform addons, builds the WinUHid user libraries on Windows,
+checks the npm tarball, and publishes version tags of the form `v1.2.3` when
+the `NPM_TOKEN` repository secret is configured. Pull requests build and
+inspect the package without publishing it.
+
+To test the exact package locally before publishing:
+
+```sh
+npm pack
+```
+
+This creates a tarball in the repository directory. Install that tarball into
+a separate temporary project using Node.js 18 or newer:
+
+```sh
+mkdir /tmp/crosspad-package-test
+cd /tmp/crosspad-package-test
+npm init -y
+npm install /absolute/path/to/native-x360-pad-0.1.0.tgz
+node -e "const p=require('native-x360-pad'); console.log(Object.keys(p))"
+```
+
+The install should use the prebuilt addon without compiling. The package
+loader selects:
+
+```text
+prebuilds/linux-x64/virtual_x360.node
+prebuilds/win32-x64/virtual_x360.node
+```
+
+On Windows, the published package also contains:
+
+```text
+vendor/WinUHid/bin/win32-x64/WinUHid.dll
+vendor/WinUHid/bin/win32-x64/WinUHidDevs.dll
+```
+
+You can inspect the exact tarball contents without creating it permanently:
+
+```sh
+npm pack --dry-run
+```
+
+After a GitHub Actions run completes, download the `linux-package-files` or
+`windows-package-files` artifact from the workflow run's **Artifacts** section.
+The release `package` job combines those files with the checked-out source and
+verifies the final npm tarball. A tag build publishes the same package when
+`NPM_TOKEN` is configured.
 
 ## Xbox One-style controller
 
@@ -50,7 +115,7 @@ The included [hello-world example](examples/hello-world.js) creates this
 profile, rotates both analog sticks, moves the D-pad, and cycles A/B/X/Y:
 
 ```sh
-pnpm start
+npm start
 ```
 
 `createXboxOneController()` uses the MIT-licensed upstream WinUHidDevs Xbox
@@ -147,8 +212,8 @@ sudo usermod -aG input "$USER"
 Log out and back in after changing group membership, then build and run:
 
 ```sh
-pnpm install
-pnpm start
+npm install
+npm start
 ```
 
 If `/dev/uinput` is unavailable, check that the module is loaded and that the
@@ -195,13 +260,13 @@ Install these prerequisites:
 Build the addon and build/install the local WinUHid driver:
 
 ```powershell
-pnpm build:windows
+npm run build:windows
 ```
 
 Or build only the WinUHid libraries and driver:
 
 ```powershell
-pnpm build:winuhid
+npm run build:winuhid
 ```
 
 The script builds and bundles:
@@ -258,6 +323,4 @@ The original license and copyright notice are preserved in
 [vendor/WinUHid/LICENSE](vendor/WinUHid/LICENSE).
 
 The WinUHid source and preset are used directly from the upstream MIT-licensed
-project. CrossPad does not include GPL-licensed Switch2Connect source.
-
 CrossPad itself is distributed under the MIT License.
