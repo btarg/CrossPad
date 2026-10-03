@@ -1,5 +1,6 @@
 node_modules/
 build/
+prebuilds/
 npm-debug.log*
 pnpm-debug.log*
 
@@ -15,3 +16,5 @@ vendor/WinUHid/**/*.exp
 vendor/WinUHid/**/*.lib
 vendor/WinUHid/**/*.recipe
 vendor/WinUHid/**/*.pch
+vendor/WinUHid/bin/
+vendor/WinUHid/package/

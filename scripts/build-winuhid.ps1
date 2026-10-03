@@ -1,6 +1,7 @@
 param(
   [switch]$InstallDriver = $true,
   [switch]$InstallOnly,
+  [switch]$SkipDeviceVerification,
   [string]$InstallLogPath
 )
 
@@ -141,6 +142,12 @@ if ($InstallDriver) {
   } else {
     Install-WinUhidDriver
   }
+}
+
+if ($SkipDeviceVerification) {
+  Write-Host "Bundled WinUHid.dll at $output"
+  Write-Host "WinUHid driver package built without installing the device."
+  exit 0
 }
 
 $deviceReady = $false

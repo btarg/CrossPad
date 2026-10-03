@@ -46,10 +46,15 @@ alone cannot install a Windows device driver. The package exposes an explicit
 `installDriver()` helper for this setup step.
 
 The repository's [GitHub Actions workflow](.github/workflows/package.yml)
-rebuilds both platform addons, builds the WinUHid user libraries on Windows,
-checks the npm tarball, and publishes version tags of the form `v1.2.3` when
+rebuilds both platform addons, builds and packages the WinUHid user libraries
+and driver on Windows, checks the npm tarball, and publishes version tags of the form `v1.2.3` when
 the `NPM_TOKEN` repository secret is configured. Pull requests build and
 inspect the package without publishing it.
+
+Generated Windows driver files are not committed to Git. The Windows CI job
+builds `WinUHidDriver.dll`, its INF, and catalog, uploads them with the other
+runtime artifacts, and the package job assembles the final npm tarball from
+those artifacts.
 
 To test the exact package locally before publishing:
 
