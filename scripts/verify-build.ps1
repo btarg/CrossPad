@@ -83,7 +83,12 @@ if (-not $SkipPackageTest) {
   Push-Location $rootPath
   $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) "crosspad-npm-pack-$([System.Guid]::NewGuid()).log"
   try {
-    $packOutput = & npm pack --dry-run --json 2> $stderrPath
+    $npmCommand = if ($IsWindows -or $env:OS -eq 'Windows_NT') {
+      'npm.cmd'
+    } else {
+      'npm'
+    }
+    $packOutput = & $npmCommand pack --dry-run --json 2> $stderrPath
     if ($LASTEXITCODE -ne 0) {
       $details = if (Test-Path -LiteralPath $stderrPath) {
         Get-Content -LiteralPath $stderrPath -Raw
