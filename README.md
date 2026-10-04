@@ -1,9 +1,14 @@
 # CrossPad
 
-Cross-platform Node.js bindings for creating virtual gamepads without ViGEm.
+Cross-platform Node.js module and bindings for creating virtual gamepads without ViGEm.
 
 CrossPad uses a Linux `uinput` backend and a Windows `WinUHid` backend, with an
 Xbox One-style controller profile available on both platforms.
+
+## Requirements
+
+- Windows 10 version 2004, build 19041, 64-bit (x64).
+- Any Linux distribution with kernel 5.4 or newer and `uinput` support.
 
 ## Build from source
 
